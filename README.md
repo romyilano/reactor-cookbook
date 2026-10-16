@@ -20,9 +20,10 @@ The three top-level folders cover distinct ways to build with Reactor.
 
 - [`examples/`](./examples) holds complete applications and demos built on
   hosted Reactor models. Each example is a top-level, self-contained project
-  you can copy, run, and adapt. [`examples/api-models-examples/`](./examples/api-models-examples)
-  is the per-model reference set: one frontend for each model Reactor serves on
-  the API, and the templates `npx create-reactor-app` scaffolds from.
+  you can copy, run, and adapt. The per-model reference frontends — one for
+  each model Reactor serves on the API, and the templates
+  `npx create-reactor-app` scaffolds from — live beside that CLI in
+  [reactor-team/create-reactor-app](https://github.com/reactor-team/create-reactor-app).
 - [`models/`](./models) holds models you deploy. Each folder is a `reactor`
   workspace you build and run with the CLI, and everything that deployment
   needs lives inside it. [Build your own model](https://docs.reactor.inc/deploy/overview)
@@ -32,6 +33,11 @@ The three top-level folders cover distinct ways to build with Reactor.
   built on the Python SDK.
 
 Each example has a README explaining what it does and how to run it.
+
+For a first robotics API call, the [FLUX 0.3.0 quickstart](./robotics/flux3-action-droid)
+shows how to select a checkpoint for a session, stream camera observations and
+state, and receive action predictions. It runs without local model weights or
+a simulator; use a Reactor API key to connect to the public FLUX model.
 
 ## Contributing
 

@@ -1,0 +1,13 @@
+[project]
+name = "rldx-1-client-python"
+version = "0.4.0"
+description = "Reactor Python SDK client for RLDX-1 — synchronized input and client-owned RTC scheduling"
+requires-python = ">=3.10"
+dependencies = [
+    # WebRTC connection stats, plus frame metadata and preserved capture stamps.
+    "reactor-sdk>=1.6.0,<2",
+    "numpy>=1.24.0",
+]
+# No aiortc / av. On the 1.x SDK a published track is a `reactor_sdk.Track` that
+# takes numpy frames through `push_frame`; there is no aiortc MediaStreamTrack to
+# subclass and no PyAV VideoFrame to build.

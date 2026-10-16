@@ -6,7 +6,7 @@ is the map.
 
 | Client | Model | Style | Chunk |
 |---|---|---|---|
-| :class:`~reactor_robotics.xwam.XwamClient` | ``xwam`` | lock-step, ``chunk_id`` echoed as ``step`` | ``(32, 14)`` delta joints |
+| :class:`~reactor_robotics.xwam.XwamClient` | ``xwam`` | lock-step, ``chunk_id`` echoed as ``step`` | ``(32, 14)`` end-effector/gripper deltas |
 | :class:`~reactor_robotics.lingbot_va.LingbotVaClient` | ``lingbot-va`` | lock-step, driven by the executed-action echo | ``(16, 7)`` eef deltas |
 | :class:`~reactor_robotics.cosmos_droid.CosmosDroidClient` | ``cosmos-nano-policy-droid`` | stateless, one chunk per executed-step report | ``(32, 8)`` absolute joints |
 | :class:`~reactor_robotics.groot_n17.GrootN17Client` | ``groot-n17`` | free-running, paired by engine ordering | ``(40, 17)`` across 3 named fields |
@@ -19,7 +19,7 @@ each client's module docstring states how.
 
 All six sit on :class:`~reactor_robotics.session.ReactorSession`, which
 manages the connection lifecycle: handlers registered before ``connect()``,
-tracks published only after ``READY``, and a 10 s keepalive ping.
+tracks published only after ``READY``, and one paced stamped-frame publisher.
 
 An evaluation harness and a controller for a physical robot use the *same
 client*: they differ only in where the frames and the state come from, never

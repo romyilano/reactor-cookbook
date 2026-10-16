@@ -9,6 +9,11 @@ physics simulator against the same served policies, using the Python
 
 ## Quickstarts
 
+The [FLUX 0.3.0 quickstart](../flux3-action-droid) demonstrates six checkpoint
+choices pinned per session, three camera views, measured DROID state, and
+`(32, 8)` action replies. It accepts synthetic inputs or an NPZ replay in its
+own pinned SDK environment. It does not include a closed-loop simulator.
+
 **[`notebooks/`](./notebooks)** holds seven runnable Python examples: six
 recorded-observation replays and one live robot bridge. **No simulator, no GPU,
 no model weights**: `uv sync`, an API key, and a few minutes. Open the one for
@@ -20,7 +25,7 @@ your model; there is no reading order.
   paper's benchmark is [`libero/`](./libero) below.
 - [`cosmos_droid_quickstart.md`](./notebooks/cosmos_droid_quickstart.md):
   `cosmos-nano-policy-droid`, DROID/Franka on a Cosmos3 backbone. Stateless,
-  with an executed-step echo as flow control and no `reset` on the wire:
+  with an executed-step echo as flow control:
   `(32, 8)` absolute joint targets, a 2133 ms chunk budget. Its paper's
   benchmark is [`cosmos-droid/`](./cosmos-droid) below.
 - [`xwam_quickstart.md`](./notebooks/xwam_quickstart.md): `xwam`,
@@ -39,8 +44,8 @@ your model; there is no reading order.
   the model returns `(24, 14)` action chunks.
 - [`dreamzero_quickstart.md`](./notebooks/dreamzero_quickstart.md):
   `dreamzero`, a 14B world-action model on the DROID/Franka embodiment.
-  Free-running: it broadcasts `(24, 8)` chunks and the client uses `obs_seq`
-  to know which observation a chunk actually saw.
+  Free-running: it broadcasts `(24, 8)` chunks. The client uses `obs_seq`
+  to discard already-seen counters; it is not a client observation ID.
 - [`xr1_robocasa365_quickstart.md`](./notebooks/xr1_robocasa365_quickstart.md):
   `xr1-robocasa365`, Xiaomi's XR-1 fine-tuned for RoboCasa365 kitchen
   manipulation. Lock-step, echo-gated from the first request: `(16, 60)`
@@ -88,7 +93,7 @@ loop imports. No sim assets and no model weights are vendored here.
 | Simulator    | LIBERO (robosuite/MuJoCo) | RoboLab (Isaac Sim) | RoboTwin 2.0 | RoboLab (Isaac Sim) | RoboCasa365 (robosuite/MuJoCo) |
 | Policy       | `lingbot-va` | `cosmos-nano-policy-droid` | `xwam` | `dreamzero` | `xr1-robocasa365` |
 | Layout       | env wrapper + rollout loop | gateway (openpi WebSocket) | gateway (the authors' pickle-over-zmq port) | gateway (openpi WebSocket) | drop-in client, imported by the vendor's loop |
-| Protocol     | lock-step: execute a chunk, echo it, wait for the next | one chunk per request, executed in full | lock-step: one request out, block for the reply | free-running: the model broadcasts, and chunks are matched to observations by `obs_seq` | lock-step: echo-gated from the first request, one chunk per executed-step echo |
+| Protocol     | lock-step: execute a chunk, echo it, wait for the next | one chunk per request, executed in full | lock-step: one request out, block for the reply | free-running: the model broadcasts, and `obs_seq` filters already-seen chunks | lock-step: echo-gated from the first request, one chunk per executed-step echo |
 | Action chunk | `(16, 7)` end-effector deltas | `(32, 8)` absolute joint targets | `(32, 14)` | `(24, 8)` | `(16, 60)` packed, first 12 live |
 | Video        | two tracks (`agentview`, `eye_in_hand`), one frame per env render, plus a heartbeat | three tracks, one frame per request, plus a heartbeat | three tracks, repeating the current frame between requests | three tracks, queue-fed, no repeats | three tracks, a 4-frame history per request, slots pushed as per-camera sets |
 

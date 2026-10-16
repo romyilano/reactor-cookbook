@@ -4,15 +4,56 @@ Six replay quickstarts and one live robot bridge for hosted Reactor robotics
 policies. They need no simulator, GPU, or model weights: `uv sync`, an API key,
 and a few minutes.
 
+The [FLUX 0.3.0 quickstart](../../flux3-action-droid) is also available, with
+synthetic or NPZ inputs and six checkpoints pinned per session. Follow its
+setup commands in its own directory to use the tested locked Python SDK environment.
+
 Open the guide for the model you care about and run its script; there is no
 reading order. `xwam` is the reference implementation of
 the generic [robot policy client contract](./robot-policy-client-contract.md),
 so it is the one to read if you want the contract itself rather than a model.
 
+## Official documentation setup
+
+The [robotics docs](https://docs.reactor.inc/robotics/overview) use this public
+folder for all first-action examples. From this directory, run
+`uv sync --frozen --python 3.12` to install the tested Python SDK from the lockfile
+and the [`reactor_robotics` helper directory in Reactor’s public cookbook](./reactor_robotics).
+Its README documents installation and return values. The SDK owns transport keepalive
+and publishes frames through native tracks. On Linux, its glibc wheel requires glibc 2.34 or newer.
+
+The docs' synthetic-input examples need no recorded data, simulator, GPU, or
+model weights. They check connectivity and response shape, not task success.
+Hosted model access and an API key are still required.
+
+Offline checks: `uv run --frozen python -m unittest discover -s tests -v`.
+
+## First actions without recorded inputs
+
+These scripts are the runnable examples shown in the official model quickstarts.
+They generate synthetic observations and only inspect returned actions; they do
+not execute robot motion. From this directory, use `uv run --frozen python <file>`.
+
+| Model | Script |
+| --- | --- |
+| Cosmos DROID | [first_cosmos_actions.py](first_cosmos_actions.py) |
+| FLUX Action DROID | [first_flux_actions.py](first_flux_actions.py) |
+| X-WAM RoboTwin | [first_xwam_actions.py](first_xwam_actions.py) |
+| LingBot-VA LIBERO | [first_lingbot_actions.py](first_lingbot_actions.py) |
+| DreamZero DROID | [first_dreamzero_droid_actions.py](first_dreamzero_droid_actions.py) |
+| DreamZero YAM | [first_dreamzero_yam_actions.py](first_dreamzero_yam_actions.py) |
+| XR-1 RoboCasa365 | [first_xr1_robocasa_actions.py](first_xr1_robocasa_actions.py) |
+| XR-1 Bimanual (access required) | [first_xr1_actions.py](first_xr1_actions.py) |
+| FastWAM LIBERO | [first_fastwam_actions.py](first_fastwam_actions.py) |
+
+FastWAM uses `reactor/fastwam-libero` and requires account access. Contact Reactor
+if it is not enabled for your account. All examples need capacity on the chosen
+model; a successful SDK installation does not guarantee an available worker.
+
 ## Choose a model
 
-Every replay guide starts with the same lightweight recorded-observation
-workflow. Its last two sections cover the optional closed-loop simulator and
+The six replay guides in this directory start with the same lightweight
+recorded-observation workflow. Their last two sections cover the optional closed-loop simulator and
 the remaining work for physical deployment. Published figures link to
 upstream sources;
 figures labeled Reactor-measured come from the committed harness or fixture
@@ -20,9 +61,10 @@ provenance.
 
 | Guide | Protocol | Chunk | Closed-loop harness |
 |---|---|---|---|
+| [FLUX 0.3.0](../../flux3-action-droid) | request/reply with `chunk_id` echo; checkpoint pinned per session | `(32, 8)` absolute joints + gripper | not included; synthetic or user-supplied NPZ replay |
 | [`lingbot-va`](./lingbot_va_quickstart.md) | executed-action echo | `(16, 7)` eef deltas | [`LIBERO`](../libero), CPU |
 | [`cosmos-nano-policy-droid`](./cosmos_droid_quickstart.md) | stateless executed-step report | `(32, 8)` absolute joints | [`RoboLab`](../cosmos-droid), RTX GPU |
-| [`xwam`](./xwam_quickstart.md) | request/reply with `chunk_id` echo | `(32, 14)` delta joints | [`RoboTwin 2.0`](../robotwin), CUDA GPU |
+| [`xwam`](./xwam_quickstart.md) | request/reply with `chunk_id` echo | `(32, 14)` end-effector and gripper deltas | [`RoboTwin 2.0`](../robotwin), CUDA GPU |
 | [`groot-n17`](./groot_n17_quickstart.md) | free-running | `(40, 17)` named fields | not wired in this repo |
 | [`dreamzero`](./dreamzero_quickstart.md) | free-running with `obs_seq` gate | `(24, 8)` absolute joints | [`RoboLab`](../dreamzero), RTX GPU |
 | [`xr1-robocasa365`](./xr1_robocasa365_quickstart.md) | echo-gated from first chunk | `(16, 60)` packed, 12 live | [`RoboCasa365`](../robocasa365), CUDA GPU |
@@ -39,6 +81,9 @@ client written against the generic contract will not drive them unchanged.
 `dreamzero-yam-molmoact2` to a bimanual YAM robot. Run the example with
 placeholder cameras and state, then replace three methods to connect your
 hardware. The model returns free-running `(24, 14)` action chunks.
+[`dreamzero_yam_bridge_i2rt.py`](./dreamzero_yam_bridge_i2rt.py) is the same
+bridge with the stubs pre-filled for i2rt YAM hardware (CAN arms, OpenCV
+cameras, safety limiter); `--mock` runs it without any hardware.
 
 ## Setup
 
@@ -56,16 +101,12 @@ For an explicit package install instead of the project environment:
 
 ```sh
 uv venv --python 3.12
-uv pip install "reactor-sdk==0.8.0" "aiortc>=1.9" "av>=12.0" "numpy>=1.26"
+uv sync --frozen --python 3.12
 ```
 
 Set the key in your shell, not in a script: a key pasted into a script is
 committed. Nothing in these quickstarts prints it; the key check reports only
 its length.
-
-At session close the SDK may log `WARNING Control channel not open; dropping
-'unpublish_track' notification` a few times. That is benign teardown noise —
-the session is already closing — not a failure.
 
 `REACTOR_API_URL` defaults to `https://api.reactor.inc` (PROD, where all seven
 models are served). It exists as an escape hatch for pointing at another
@@ -79,8 +120,8 @@ deployment.
 dreamzero_yam_bridge.py          live bimanual YAM bridge
 dreamzero_yam_bridge.md          integration guide and safety boundary
 reactor_robotics/
-  session.py       connect + READY + tracks + keepalive; the shared plumbing
-  track.py         a video track that repeats one frame until you replace it
+  session.py       connect + READY + stamped frame publisher; shared plumbing
+  track.py         holds one captured frame until you replace it
   xwam.py          XwamClient.predict():        lock-step, chunk_id echoed
   lingbot_va.py    LingbotVaClient.predict():   lock-step, executed-action echo
   cosmos_droid.py  CosmosDroidClient.predict(): stateless, executed-step report
@@ -119,20 +160,19 @@ same code path that produced the published X-WAM evaluation numbers.
 ## Session lifecycle
 
 `reactor_robotics/session.py` manages the connection lifecycle (handler
-registration, readiness, keepalive) so no script has to:
+registration, readiness, publishing) so no script has to:
 
 1. Register handlers before `connect()`. `READY` can arrive before your
    first `await` after `connect()` returns.
-2. Publish tracks only after `READY`. An earlier `publish_track` creates no
-   track, and the model then waits for frames that never arrive.
-3. Ping every 10 s, for the whole session. The runtime disconnects a client
-   that stays quiet for 20 s, and 0.8.0 leaves keepalive to the client. This
-   matters most when you are not sending anything else, for example while a
-   robot executes a chunk. Three scripts demonstrate it by sitting idle for
-   25 s.
+2. Publish tracks only after `READY`; the current SDK rejects an early
+   `publish_track`.
+3. Push all views from one paced loop. One observation receives one shared
+   `capture_time_us`, without claiming the model consumed synchronized observations.
+   The current SDK sends the runtime keepalive itself every 10 s; the idle
+   checks demonstrate that the session survives past the 20 s timeout.
 
-Keep `logging.basicConfig(level=INFO)` on: dropped commands are logged, not
-raised.
+SDK operation failures raise exceptions; model rejections may also arrive as
+`command_error` messages. See the [helper reference](./reactor_robotics#messages-and-return-values).
 
 ## What gets checked
 
