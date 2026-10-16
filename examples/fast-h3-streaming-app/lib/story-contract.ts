@@ -1,6 +1,6 @@
-export const OPENAI_STORY_MODEL = "gpt-5.6-luna";
-export const OPENAI_MAX_IMAGES = 2;
-export const OPENAI_MAX_IMAGE_PAYLOAD = 9 * 1024 * 1024;
+export const STORY_MODEL = "claude-haiku-5-5";
+export const STORY_MAX_IMAGES = 2;
+export const STORY_MAX_IMAGE_PAYLOAD = 9 * 1024 * 1024;
 
 export type StoryHistoryItem = {
   sceneSummary: string;

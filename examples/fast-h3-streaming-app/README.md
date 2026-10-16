@@ -20,7 +20,7 @@ This example demonstrates how to:
 - receive synchronized `main_video` and `main_audio` WebRTC tracks;
 - read a refused command, with its code and reason, from the call that sent
   it (see `sendFastH3Command` in `lib/h3-contract.ts`); and
-- optionally use OpenAI GPT-5.6 Luna to plan the next beat and dialogue, with
+- optionally use Claude Haiku 5.5 to plan the next beat and dialogue, with
   direct FastH3 prompting as the fallback.
 
 The moustached Galton opening frame and all 16 cooking props are bundled demo
@@ -73,9 +73,9 @@ Reactor clip ID directly.
 
 ## Optional story planning
 
-Set `OPENAI_API_KEY` in `.env.local` to enable the optional low-latency story
-planner. It uses GPT-5.6 Luna through the Responses API with reasoning disabled
-and priority processing. Without the key, operator directions and prop
+Set `ANTHROPIC_API_KEY` in `.env.local` to enable the optional low-latency story
+planner. It uses Claude Haiku 5.5 through the Messages API with structured JSON
+output at low effort. Set `STORY_MODEL` to use a different Claude model. Without the key, operator directions and prop
 instructions go directly to FastH3, so the demo remains fully usable.
 
 ## Where to change things
@@ -88,7 +88,7 @@ instructions go directly to FastH3, so the demo remains fully usable.
   queue message contract used by the client.
 - [`app/api/reactor/token/route.ts`](./app/api/reactor/token/route.ts) exchanges
   the server-side API key for a short-lived token scoped to `reactor/fast-h3`.
-- [`app/api/story/route.ts`](./app/api/story/route.ts) is the optional OpenAI
+- [`app/api/story/route.ts`](./app/api/story/route.ts) is the optional Claude
   planning proxy.
 
 ## Verify changes

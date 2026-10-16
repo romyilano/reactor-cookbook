@@ -1,22 +1,23 @@
+import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 import {
-  OPENAI_MAX_IMAGE_PAYLOAD,
-  OPENAI_MAX_IMAGES,
-  OPENAI_STORY_MODEL,
+  STORY_MAX_IMAGE_PAYLOAD,
+  STORY_MAX_IMAGES,
+  STORY_MODEL,
   type StoryHistoryItem,
   type StoryPlanRequest,
-} from "@/lib/openai-contract";
+} from "@/lib/story-contract";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
-const VISION_DATA_URL = /^data:image\/(?:jpeg|png);base64,[A-Za-z0-9+/=]+$/;
+const VISION_DATA_URL = /^data:(image\/(?:jpeg|png));base64,([A-Za-z0-9+/=]+)$/;
+const PLANNER_MODEL = process.env.STORY_MODEL?.trim() || STORY_MODEL;
 
-function credentialFrom() {
-  const credential = process.env.OPENAI_API_KEY?.trim();
-  if (!credential) throw new Error("Missing OPENAI_API_KEY.");
-  return credential;
+function clientFrom() {
+  const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
+  if (!apiKey) throw new Error("Missing ANTHROPIC_API_KEY.");
+  return new Anthropic({ apiKey, maxRetries: 0 });
 }
 
 function historyFrom(value: unknown): StoryHistoryItem[] {
@@ -34,13 +35,20 @@ function historyFrom(value: unknown): StoryHistoryItem[] {
 
 function imagesFrom(value: unknown) {
   if (!Array.isArray(value)) return [];
-  const images = value.slice(0, OPENAI_MAX_IMAGES).filter((item): item is string => (
+  const images = value.slice(0, STORY_MAX_IMAGES).filter((item): item is string => (
     typeof item === "string" && VISION_DATA_URL.test(item)
   ));
-  if (images.reduce((sum, image) => sum + image.length, 0) > OPENAI_MAX_IMAGE_PAYLOAD) {
-    throw new Error("OpenAI image context is too large.");
+  if (images.reduce((sum, image) => sum + image.length, 0) > STORY_MAX_IMAGE_PAYLOAD) {
+    throw new Error("Story planner image context is too large.");
   }
-  return images;
+  return images.flatMap((image) => {
+    const match = VISION_DATA_URL.exec(image);
+    if (!match) return [];
+    return [{
+      type: "image" as const,
+      source: { type: "base64" as const, media_type: match[1] as "image/jpeg" | "image/png", data: match[2] },
+    }];
+  });
 }
 
 function propsFrom(value: unknown) {
@@ -48,33 +56,6 @@ function propsFrom(value: unknown) {
   return value.slice(0, 4).flatMap((item) => (
     typeof item === "string" && item.trim() ? [item.trim().slice(0, 500)] : []
   ));
-}
-
-function upstreamMessage(value: unknown) {
-  if (!value || typeof value !== "object") return null;
-  const record = value as Record<string, unknown>;
-  if (typeof record.message === "string") return record.message;
-  if (record.error && typeof record.error === "object") {
-    const nested = record.error as Record<string, unknown>;
-    if (typeof nested.message === "string") return nested.message;
-  }
-  return null;
-}
-
-function outputTextFrom(value: Record<string, unknown>) {
-  if (typeof value.output_text === "string") return value.output_text;
-  if (!Array.isArray(value.output)) return null;
-  for (const item of value.output) {
-    if (!item || typeof item !== "object") continue;
-    const content = (item as Record<string, unknown>).content;
-    if (!Array.isArray(content)) continue;
-    for (const part of content) {
-      if (!part || typeof part !== "object") continue;
-      const record = part as Record<string, unknown>;
-      if (record.type === "output_text" && typeof record.text === "string") return record.text;
-    }
-  }
-  return null;
 }
 
 const STORY_SCHEMA = {
@@ -90,14 +71,14 @@ const STORY_SCHEMA = {
 
 export function GET() {
   return NextResponse.json(
-    { enabled: Boolean(process.env.OPENAI_API_KEY?.trim()) },
+    { enabled: Boolean(process.env.ANTHROPIC_API_KEY?.trim()) },
     { headers: { "Cache-Control": "no-store, max-age=0" } },
   );
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const credential = credentialFrom();
+    const client = clientFrom();
     const body = (await request.json()) as Partial<StoryPlanRequest>;
     const direction = typeof body.direction === "string" ? body.direction.trim().slice(0, 4_000) : "";
     if (!direction) return NextResponse.json({ error: "A story direction is required." }, { status: 400 });
@@ -118,70 +99,42 @@ export async function POST(request: NextRequest) {
       `Plan only the next ${duration} seconds.`,
     ].join("\n\n");
 
-    const inputContent: Array<Record<string, unknown>> = [{ type: "input_text", text: userText }];
-    for (const image of images) {
-      inputContent.push({ type: "input_image", image_url: image, detail: "low" });
-    }
-
     const startedAt = Date.now();
-    const response = await fetch(OPENAI_RESPONSES_URL, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${credential}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: OPENAI_STORY_MODEL,
-        instructions: [
-          "You are the live showrunner for an infinite audiovisual stream built from continuous short video clips.",
-          "Continue the story causally from the newest history and visual frame while preserving character identity, location, lighting, screen direction, props, and camera language.",
-          "Treat the operator direction as the requested next beat. Treat every named persistent prop as mandatory scene state and visibly incorporate it into the established scene in the most intuitive way.",
-          "All newly added objects and images arrive as textual scene cues. Incorporate each named cue intuitively without cutting away from the established scene. Keep every named persistent prop visible or logically present across frames; subjects may receive, notice, pick up, prepare, move, or cook with them, but the props must not vanish.",
-          `Write a concrete FastH3 generation prompt describing visible action over ${duration} seconds, camera behavior, ambience, sound effects, and a spoken line when dialogue helps the story.`,
-          `Keep dialogue speakable within ${duration} seconds and quote the exact words inside videoPrompt. Do not mention prompts, source images, chunks, models, or continuity systems.`,
-        ].join(" "),
-        input: [{ role: "user", content: inputContent }],
-        reasoning: { effort: "none" },
-        service_tier: "priority",
-        text: {
-          verbosity: "low",
-          format: {
-            type: "json_schema",
-            name: "next_story_beat",
-            strict: true,
-            schema: STORY_SCHEMA,
-          },
-        },
-        max_output_tokens: 650,
-        store: false,
-      }),
-      cache: "no-store",
-      signal: AbortSignal.timeout(10_000),
-    });
-    const data = await response.json().catch(() => ({})) as Record<string, unknown>;
-    if (!response.ok) {
-      return NextResponse.json(
-        { error: upstreamMessage(data) || `OpenAI returned ${response.status}.` },
-        { status: response.status >= 400 && response.status <= 599 ? response.status : 502 },
-      );
-    }
+    const response = await client.messages.create({
+      model: PLANNER_MODEL,
+      max_tokens: 650,
+      system: [
+        "You are the live showrunner for an infinite audiovisual stream built from continuous short video clips.",
+        "Continue the story causally from the newest history and visual frame while preserving character identity, location, lighting, screen direction, props, and camera language.",
+        "Treat the operator direction as the requested next beat. Treat every named persistent prop as mandatory scene state and visibly incorporate it into the established scene in the most intuitive way.",
+        "All newly added objects and images arrive as textual scene cues. Incorporate each named cue intuitively without cutting away from the established scene. Keep every named persistent prop visible or logically present across frames; subjects may receive, notice, pick up, prepare, move, or cook with them, but the props must not vanish.",
+        `Write a concrete FastH3 generation prompt describing visible action over ${duration} seconds, camera behavior, ambience, sound effects, and a spoken line when dialogue helps the story.`,
+        `Keep dialogue speakable within ${duration} seconds and quote the exact words inside videoPrompt. Do not mention prompts, source images, chunks, models, or continuity systems.`,
+      ].join(" "),
+      messages: [{ role: "user", content: [...images, { type: "text", text: userText }] }],
+      output_config: { effort: "low", format: { type: "json_schema", schema: STORY_SCHEMA } },
+    }, { timeout: 10_000 });
 
-    const rawContent = outputTextFrom(data);
-    if (!rawContent) throw new Error("OpenAI returned no story plan.");
-    const plan = JSON.parse(rawContent) as Record<string, unknown>;
+    if (response.stop_reason === "refusal") throw new Error("The story planner declined this request.");
+    const textBlock = response.content.find((block) => block.type === "text");
+    if (!textBlock || textBlock.type !== "text") throw new Error("The story planner returned no story plan.");
+    const plan = JSON.parse(textBlock.text) as Record<string, unknown>;
     const videoPrompt = typeof plan.videoPrompt === "string" ? plan.videoPrompt.trim().slice(0, 8_000) : "";
-    if (!videoPrompt) throw new Error("OpenAI returned an empty video prompt.");
+    if (!videoPrompt) throw new Error("The story planner returned an empty video prompt.");
 
     return NextResponse.json({
       videoPrompt,
       sceneSummary: typeof plan.sceneSummary === "string" ? plan.sceneSummary.trim().slice(0, 2_000) : "",
       dialogue: typeof plan.dialogue === "string" ? plan.dialogue.trim().slice(0, 500) : "",
-      model: OPENAI_STORY_MODEL,
+      model: PLANNER_MODEL,
       latencyMs: Date.now() - startedAt,
     });
   } catch (error) {
+    if (error instanceof Anthropic.APIError) {
+      return NextResponse.json({ error: error.message }, { status: error.status ?? 502 });
+    }
     const message = error instanceof Error ? error.message : "Could not plan the next story beat.";
-    const status = message.startsWith("Missing OPENAI_API_KEY") ? 503 : 502;
+    const status = message.startsWith("Missing ANTHROPIC_API_KEY") ? 503 : 502;
     return NextResponse.json({ error: message }, { status });
   }
 }
